@@ -7,6 +7,8 @@ typedef struct __bingo_server_struct {
 
   /** @brief fd_set struct for select(). */
   fd_set reads;
+  /** @brief fd_set result from select(). */
+  fd_set select_result;
   /** @brief select() timeout. */
   struct timeval timeout;
 

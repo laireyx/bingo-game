@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 
 #include "constant.h"
+#include "message.h"
 #include "error.h"
 #include "server.h"
 
@@ -39,6 +40,8 @@ bingo_server server_init(unsigned int addr, unsigned short port) {
   FD_ZERO(&server->reads);
   FD_SET(server->socket_fd, &server->reads);
 
+  server->fd_max = server->socket_fd;
+
   return server;
 }
 
@@ -47,7 +50,7 @@ int server_run(bingo_server server) {
 
   while (_poll(server) > 0) {
     for (fd = 0; fd <= server->fd_max; fd++) {
-      if (FD_ISSET(fd, &server->reads)) {
+      if (FD_ISSET(fd, &server->select_result)) {
         if (fd == server->socket_fd) {
           _accept_new_client(server);
         } else {
@@ -71,15 +74,17 @@ int server_close(bingo_server server) {
 }
 
 static int _poll(bingo_server server) {
-  int fd_num;
+  int fd_num = 0;
   struct timeval timeout;
 
   timeout.tv_sec = 5;
   timeout.tv_usec = 5000;
 
   while (1) {
-    if ((fd_num = select(server->fd_max + 1, &server->reads, 0, 0, &timeout)) ==
-        -1)
+    server->select_result = server->reads;
+
+    if ((fd_num = select(server->fd_max + 1, &server->select_result, 0, 0,
+                         &timeout)) == -1)
       return -1;
     if (fd_num == 0) continue;
 
@@ -103,18 +108,26 @@ static void _accept_new_client(bingo_server server) {
 }
 
 static void _handle_client(bingo_server server, int clnt_fd) {
-  int str_len;
-  char buf[BUF_SIZE];
+  bingo_message_c2s clnt_msg;
+  bingo_message_s2c serv_msg;
 
-  str_len = read(clnt_fd, buf, BUF_SIZE);
-
-  if (str_len == 0) {
+  if (read_c2s(clnt_fd, &clnt_msg) < 0) {
     FD_CLR(clnt_fd, &server->reads);
     close(clnt_fd);
 
     server->connection_count--;
     printf("closed client: %d\n", clnt_fd);
   } else {
-    write(clnt_fd, "Hello\n", 7);
+    printf("Client #%d says it has %d bingo(s).\n", clnt_fd,
+           clnt_msg.bingo_count);
+
+    if (clnt_msg.bingo_count >= 3) {
+      printf(">= 3 bingo: game finished\n");
+      serv_msg.game_finished = 1;
+    } else {
+      serv_msg.game_finished = 0;
+    }
+
+    write_s2c(clnt_fd, &serv_msg);
   }
 }
