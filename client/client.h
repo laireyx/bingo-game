@@ -3,7 +3,7 @@
 
 typedef struct __bingo_client_struct {
   // server sock
-  int sock;
+  int socket_fd;
 
   unsigned char bingo_board[5][5];
   unsigned char checked[5][5];

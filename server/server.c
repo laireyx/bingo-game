@@ -15,26 +15,34 @@ static void _accept_new_client(bingo_server server);
 static void _handle_client(bingo_server server, int clnt_sock);
 
 bingo_server server_init(unsigned int addr, unsigned short port) {
+  int optval = 1;
   struct sockaddr_in serv_adr;
   bingo_server server = malloc(sizeof(struct __bingo_server_struct));
 
   server->socket_fd = socket(PF_INET, SOCK_STREAM, 0);
+
+  if (server->socket_fd < 0) {
+    error_handling("socket() error");
+    free(server);
+    return 0;
+  }
 
   memset(&serv_adr, 0, sizeof(serv_adr));
   serv_adr.sin_family = AF_INET;
   serv_adr.sin_addr.s_addr = htonl(addr);
   serv_adr.sin_port = htons(port);
 
-  int optval = 1;
   setsockopt(server->socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval,
              sizeof(optval));
   if (bind(server->socket_fd, (struct sockaddr *)&serv_adr, sizeof(serv_adr)) ==
       -1) {
     error_handling("bind() error");
+    free(server);
     return 0;
   }
   if (listen(server->socket_fd, 5) == -1) {
     error_handling("listen() error");
+    free(server);
     return 0;
   }
 

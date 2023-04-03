@@ -24,5 +24,7 @@ int main(int argc, char **argv) {
 
   client_run(client);
 
+  client_close(client);
+
   return 0;
 }
