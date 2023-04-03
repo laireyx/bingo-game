@@ -1,3 +1,4 @@
+#include "constant.h"
 
 #ifdef _MSC_VER
 #pragma pack(push, 1)
@@ -5,6 +6,7 @@
 
 typedef struct {
   unsigned char bingo_count;
+  unsigned char bingo_number;
 }
 #ifdef __GNUC__
 __attribute__((packed))
@@ -13,6 +15,9 @@ bingo_message_c2s;
 
 typedef struct {
   unsigned char game_finished;
+  unsigned char your_turn;
+  unsigned char bingo_number;
+  char msg[BUF_SIZE];
 }
 #ifdef __GNUC__
 __attribute__((packed))
@@ -31,7 +36,7 @@ bingo_message_s2c;
  * @param[out] message read message
  * @return 0 if success, -1 otherwise
  */
-int read_c2s(int fd, bingo_message_c2s* message);
+int read_c2s(int fd, bingo_message_c2s *message);
 
 /**
  * @brief Write server-to-client message from the socket.
@@ -41,7 +46,7 @@ int read_c2s(int fd, bingo_message_c2s* message);
  * @param message message to write
  * @return 0 if success, -1 otherwise
  */
-int write_s2c(int fd, bingo_message_s2c* message);
+int write_s2c(int fd, bingo_message_s2c *message);
 
 /**
  * @brief Read server-to-client message from the socket.
@@ -51,7 +56,7 @@ int write_s2c(int fd, bingo_message_s2c* message);
  * @param[out] message read message
  * @return 0 if success, -1 otherwise
  */
-int read_s2c(int fd, bingo_message_s2c* message);
+int read_s2c(int fd, bingo_message_s2c *message);
 
 /**
  * @brief Write client-to-server message from the socket.
@@ -61,4 +66,4 @@ int read_s2c(int fd, bingo_message_s2c* message);
  * @param message message to write
  * @return 0 if success, -1 otherwise
  */
-int write_c2s(int fd, bingo_message_c2s* message);
+int write_c2s(int fd, bingo_message_c2s *message);
