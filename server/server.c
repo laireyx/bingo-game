@@ -156,6 +156,7 @@ static void _handle_client(bingo_server server, int clnt_fd) {
     }
 
     if (server->turn_fd == clnt_fd) {
+      server->turn_fd = server->clnt_fd[0] + server->clnt_fd[1] - clnt_fd;
       _broadcast_game(server, clnt_msg.bingo_number);
     }
   }
