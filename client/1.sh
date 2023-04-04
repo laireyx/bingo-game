@@ -1,0 +1,1 @@
+cmake CMakeLists.txt && make && clear && ./client.out 127.0.0.1 8088 input1.txt

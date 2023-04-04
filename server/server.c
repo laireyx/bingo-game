@@ -12,26 +12,40 @@
 
 static int _poll(bingo_server server);
 static void _accept_new_client(bingo_server server);
+static void _start_game(bingo_server server);
 static void _handle_client(bingo_server server, int clnt_sock);
+static void _finish_game(bingo_server server, int winner_fd);
+static void _broadcast_game(bingo_server server, unsigned char bingo_number);
 
 bingo_server server_init(unsigned int addr, unsigned short port) {
+  int optval = 1;
   struct sockaddr_in serv_adr;
   bingo_server server = malloc(sizeof(struct __bingo_server_struct));
 
   server->socket_fd = socket(PF_INET, SOCK_STREAM, 0);
+
+  if (server->socket_fd < 0) {
+    error_handling("socket() error");
+    free(server);
+    return 0;
+  }
 
   memset(&serv_adr, 0, sizeof(serv_adr));
   serv_adr.sin_family = AF_INET;
   serv_adr.sin_addr.s_addr = htonl(addr);
   serv_adr.sin_port = htons(port);
 
+  setsockopt(server->socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval,
+             sizeof(optval));
   if (bind(server->socket_fd, (struct sockaddr *)&serv_adr, sizeof(serv_adr)) ==
       -1) {
     error_handling("bind() error");
+    free(server);
     return 0;
   }
   if (listen(server->socket_fd, 5) == -1) {
     error_handling("listen() error");
+    free(server);
     return 0;
   }
 
@@ -101,15 +115,33 @@ static void _accept_new_client(bingo_server server) {
   clnt_fd = accept(server->socket_fd, (struct sockaddr *)&clnt_adr, &adr_sz);
   FD_SET(clnt_fd, &server->reads);
 
-  server->connection_count++;
+  server->clnt_fd[server->connection_count++] = clnt_fd;
   if (server->fd_max < clnt_fd) server->fd_max = clnt_fd;
 
   printf("connected client: %d\n", clnt_fd);
+
+  // game start
+  if (server->connection_count == 2) {
+    _start_game(server);
+  }
+}
+
+static void _start_game(bingo_server server) {
+  bingo_message_s2c serv_msg;
+
+  // Initialize server
+  server->turn_fd = server->clnt_fd[0];
+
+  // Notify to the first client
+  serv_msg.game_finished = 0;
+  serv_msg.your_turn = 1;
+  serv_msg.bingo_number = 0;
+
+  write_s2c(server->clnt_fd[0], &serv_msg);
 }
 
 static void _handle_client(bingo_server server, int clnt_fd) {
   bingo_message_c2s clnt_msg;
-  bingo_message_s2c serv_msg;
 
   if (read_c2s(clnt_fd, &clnt_msg) < 0) {
     FD_CLR(clnt_fd, &server->reads);
@@ -118,16 +150,39 @@ static void _handle_client(bingo_server server, int clnt_fd) {
     server->connection_count--;
     printf("closed client: %d\n", clnt_fd);
   } else {
-    printf("Client #%d says it has %d bingo(s).\n", clnt_fd,
-           clnt_msg.bingo_count);
-
     if (clnt_msg.bingo_count >= 3) {
-      printf(">= 3 bingo: game finished\n");
-      serv_msg.game_finished = 1;
-    } else {
-      serv_msg.game_finished = 0;
+      _finish_game(server, clnt_fd);
+      return;
     }
 
-    write_s2c(clnt_fd, &serv_msg);
+    if (server->turn_fd == clnt_fd) {
+      _broadcast_game(server, clnt_msg.bingo_number);
+    }
+  }
+}
+
+static void _finish_game(bingo_server server, int winner_fd) {
+  int i;
+  bingo_message_s2c message;
+
+  for (i = 0; i < 2; i++) {
+    message.game_finished = 1;
+    strcpy(message.msg,
+           server->clnt_fd[i] == winner_fd ? "YOU WIN" : "YOU LOSE");
+
+    write_s2c(server->clnt_fd[i], &message);
+  }
+}
+
+static void _broadcast_game(bingo_server server, unsigned char bingo_number) {
+  int i;
+  bingo_message_s2c message;
+
+  for (i = 0; i < 2; i++) {
+    message.game_finished = 0;
+    message.your_turn = server->turn_fd == server->clnt_fd[i];
+    message.bingo_number = bingo_number;
+
+    write_s2c(server->clnt_fd[i], &message);
   }
 }
