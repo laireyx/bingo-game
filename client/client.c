@@ -11,7 +11,10 @@
 #include "client.h"
 
 static int _read_board_file(bingo_client client, char *file_name);
+static void _update_board(bingo_client client, bingo_message_s2c *message);
+static unsigned char _choose_bingo_number(bingo_client client);
 static unsigned char _get_bingo_count(bingo_client client);
+static void _respond(bingo_client client);
 static void _print_bingo_board(bingo_client client);
 
 bingo_client client_init(char *addr, char *file_name, unsigned short port) {
@@ -50,53 +53,20 @@ bingo_client client_init(char *addr, char *file_name, unsigned short port) {
 int client_run(bingo_client client) {
   int i, j;
 
-  bingo_message_s2c serv_msg;
+  bingo_message_s2c message;
   bingo_message_c2s clnt_msg;
 
-  while (read_s2c(client->socket_fd, &serv_msg) == 0) {
-    printf("[server] bingo_number=%d turn=%d\n", serv_msg.bingo_number,
-           serv_msg.your_turn);
-    if (serv_msg.game_finished) {
-      puts(serv_msg.msg);
+  while (read_s2c(client->socket_fd, &message) == 0) {
+    printf("[server] bingo_number=%d turn=%d\n", message.bingo_number,
+           message.your_turn);
+
+    if (message.game_finished) {
+      puts(message.msg);
       return -1;
-    } else if (serv_msg.your_turn == 1) {
-      int flag = 0;
-
-      for (i = 0; i < 5; i++) {
-        for (j = 0; j < 5; j++) {
-          if (!client->checked[i][j]) {
-            client->checked[i][j] = 1;
-            clnt_msg.bingo_number = client->bingo_board[i][j];
-            flag = 1;
-            break;
-          }
-        }
-        if (flag) break;
-      }
-      clnt_msg.bingo_count = _get_bingo_count(client);
-
-      printf("Ok. my turn. I say '%d'\n", clnt_msg.bingo_number);
-
-      client->prev_bingo_number = clnt_msg.bingo_number;
-      write_c2s(client->socket_fd, &clnt_msg);
-    } else if (serv_msg.your_turn == 2) {
-      unsigned char bingo_number = serv_msg.bingo_number;
-      for (i = 0; i < 5; i++) {
-        for (j = 0; j < 5; j++) {
-          if (client->bingo_board[i][j] == bingo_number) {
-            if (client->prev_bingo_number != bingo_number) {
-              printf("Ok. his turn. I said '%d', He say '%d'\n",
-                     client->prev_bingo_number, bingo_number);
-            }
-            client->checked[i][j] = 1;
-            break;
-          }
-        }
-      }
-      clnt_msg.bingo_count = _get_bingo_count(client);
-      clnt_msg.bingo_number = 77;
-      write_c2s(client->socket_fd, &clnt_msg);
     }
+
+    _update_board(client, &message);
+    _respond(client);
     _print_bingo_board(client);
   }
 
@@ -135,6 +105,34 @@ static int _read_board_file(bingo_client client, char *file_name) {
   return 0;
 }
 
+static void _update_board(bingo_client client, bingo_message_s2c *message) {
+  int i, j;
+  unsigned char bingo_number = message->bingo_number;
+
+  for (i = 0; i < 5; i++) {
+    for (j = 0; j < 5; j++) {
+      if (client->bingo_board[i][j] == message->bingo_number) {
+        client->checked[i][j] = 1;
+        break;
+      }
+    }
+  }
+}
+
+static unsigned char _choose_bingo_number(bingo_client client) {
+  int i, j;
+
+  for (i = 0; i < 5; i++) {
+    for (j = 0; j < 5; j++) {
+      if (!client->checked[i][j]) {
+        return client->bingo_board[i][j];
+      }
+    }
+  }
+
+  return 0xff;
+}
+
 static unsigned char _get_bingo_count(bingo_client client) {
   int i, j;
 
@@ -164,6 +162,15 @@ static unsigned char _get_bingo_count(bingo_client client) {
   if (topright_count == 5) bingo_count++;
 
   return bingo_count;
+}
+
+static void _respond(bingo_client client) {
+  bingo_message_c2s message;
+
+  message.bingo_count = _get_bingo_count(client);
+  message.bingo_number = _choose_bingo_number(client);
+
+  write_c2s(client->socket_fd, &message);
 }
 
 static void _print_bingo_board(bingo_client client) {

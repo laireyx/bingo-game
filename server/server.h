@@ -16,10 +16,9 @@ typedef struct __bingo_server_struct {
   int fd_max;
   /** @brief Number of currently connected clients. */
   int connection_count;
-
+  /** @brief Connected client sockets. */
   int clnt_fd[2];
-
-  /** @brief */
+  /** @brief Socket of the turn client. */
   int turn_fd;
 
 } *bingo_server;

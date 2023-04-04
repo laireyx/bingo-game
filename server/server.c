@@ -12,7 +12,10 @@
 
 static int _poll(bingo_server server);
 static void _accept_new_client(bingo_server server);
+static void _start_game(bingo_server server);
 static void _handle_client(bingo_server server, int clnt_sock);
+static void _finish_game(bingo_server server, int winner_fd);
+static void _broadcast_game(bingo_server server, unsigned char bingo_number);
 
 bingo_server server_init(unsigned int addr, unsigned short port) {
   int optval = 1;
@@ -119,22 +122,26 @@ static void _accept_new_client(bingo_server server) {
 
   // game start
   if (server->connection_count == 2) {
-    bingo_message_s2c serv_msg;
-    serv_msg.your_turn = 1;
-    serv_msg.game_finished = 0;
-    serv_msg.bingo_number = 0;
-    write_s2c(server->clnt_fd[0], &serv_msg);
-    serv_msg.your_turn = 0;
-    write_s2c(server->clnt_fd[1], &serv_msg);
+    _start_game(server);
   }
+}
+
+static void _start_game(bingo_server server) {
+  bingo_message_s2c serv_msg;
+
+  // Initialize server
+  server->turn_fd = server->clnt_fd[0];
+
+  // Notify to the first client
+  serv_msg.game_finished = 0;
+  serv_msg.your_turn = 1;
+  serv_msg.bingo_number = 0;
+
+  write_s2c(server->clnt_fd[0], &serv_msg);
 }
 
 static void _handle_client(bingo_server server, int clnt_fd) {
   bingo_message_c2s clnt_msg;
-  bingo_message_s2c serv_msg;
-
-  int ano_clnt_fd =
-      (clnt_fd == server->clnt_fd[0] ? server->clnt_fd[1] : server->clnt_fd[0]);
 
   if (read_c2s(clnt_fd, &clnt_msg) < 0) {
     FD_CLR(clnt_fd, &server->reads);
@@ -144,29 +151,38 @@ static void _handle_client(bingo_server server, int clnt_fd) {
     printf("closed client: %d\n", clnt_fd);
   } else {
     if (clnt_msg.bingo_count >= 3) {
-      printf(">= 3 bingo: game finished\n");
-      serv_msg.game_finished = 1;
-
-      strcpy(serv_msg.msg, "YOU WIN");
-      write_s2c(clnt_fd, &serv_msg);
-      strcpy(serv_msg.msg, "YOU LOSE");
-      write_s2c(ano_clnt_fd, &serv_msg);
-
+      _finish_game(server, clnt_fd);
       return;
-    } else {
-      serv_msg.bingo_number = clnt_msg.bingo_number;
-      serv_msg.your_turn = 2;
-
-      if (clnt_msg.bingo_number != 77) {
-        printf("client said '%d'\n", clnt_msg.bingo_number);
-        // 두 클라이언트 모두에게 현재 숫자를 공지
-        write_s2c(clnt_fd, &serv_msg);
-        write_s2c(ano_clnt_fd, &serv_msg);
-        // 공지가 끝났으면 다음 클라이언트에게 차례 보냄
-        serv_msg.game_finished = 0;
-        serv_msg.your_turn = 1;
-        write_s2c(ano_clnt_fd, &serv_msg);
-      }
     }
+
+    if (server->turn_fd == clnt_fd) {
+      _broadcast_game(server, clnt_msg.bingo_number);
+    }
+  }
+}
+
+static void _finish_game(bingo_server server, int winner_fd) {
+  int i;
+  bingo_message_s2c message;
+
+  for (i = 0; i < 2; i++) {
+    message.game_finished = 1;
+    strcpy(message.msg,
+           server->clnt_fd[i] == winner_fd ? "YOU WIN" : "YOU LOSE");
+
+    write_s2c(server->clnt_fd[i], &message);
+  }
+}
+
+static void _broadcast_game(bingo_server server, unsigned char bingo_number) {
+  int i;
+  bingo_message_s2c message;
+
+  for (i = 0; i < 2; i++) {
+    message.game_finished = 0;
+    message.your_turn = server->turn_fd == server->clnt_fd[i];
+    message.bingo_number = bingo_number;
+
+    write_s2c(server->clnt_fd[i], &message);
   }
 }
