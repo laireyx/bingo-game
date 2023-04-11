@@ -129,7 +129,7 @@ static unsigned char _choose_bingo_number(bingo_client client) {
 
   while (1) {
     printf("Please select a number: ");
-    scanf("%hhd", &user_selected_number);
+    scanf("%hhu", &user_selected_number);
 
     if (_validate_bingo_number(client, user_selected_number) == 0) {
       break;
