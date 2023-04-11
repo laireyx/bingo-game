@@ -11,7 +11,7 @@
 #include "client.h"
 
 static int _read_board_file(bingo_client client, char *file_name);
-static void _update_board(bingo_client client, bingo_message_s2c *message);
+static void _update_board(bingo_client client, unsigned char bingo_number);
 static unsigned char _choose_bingo_number(bingo_client client);
 static int _validate_bingo_number(bingo_client client, unsigned char num);
 static unsigned char _get_bingo_count(bingo_client client);
@@ -66,7 +66,7 @@ int client_run(bingo_client client) {
       return -1;
     }
 
-    _update_board(client, &message);
+    _update_board(client, message.bingo_number);
     _respond(client, &message);
   }
 
@@ -105,14 +105,13 @@ static int _read_board_file(bingo_client client, char *file_name) {
   return 0;
 }
 
-static void _update_board(bingo_client client, bingo_message_s2c *message) {
+static void _update_board(bingo_client client, unsigned char bingo_number) {
   int i, j;
   unsigned char is_modified = 0;
-  unsigned char bingo_number = message->bingo_number;
 
   for (i = 0; i < 5; i++) {
     for (j = 0; j < 5; j++) {
-      if (client->bingo_board[i][j] == message->bingo_number) {
+      if (client->bingo_board[i][j] == bingo_number) {
         is_modified = !client->checked[i][j];
         client->checked[i][j] = 1;
         break;
@@ -196,9 +195,12 @@ static void _respond(bingo_client client, bingo_message_s2c *message_from_server
 
   if (message.bingo_count < 3 && message_from_server->your_turn == 1) {
     message.bingo_number = _choose_bingo_number(client);
+    _update_board(client, message.bingo_number);
+    message.bingo_count = _get_bingo_count(client);
   } else {
     message.bingo_number = 0xff;
   }
+
 
   write_c2s(client->socket_fd, &message);
 }
